@@ -1,0 +1,571 @@
+---
+title: "RCT_Confirmation_Testing"
+author: "Halee Staggs"
+date: "2025-05-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# Set global chunk options
+knitr::opts_chunk$set(
+  echo = TRUE,     # If false, do not show the R code , true=show code
+  include = TRUE,   # Show the output and results
+  message = FALSE,  # Suppress messages
+  warning = FALSE   # Suppress warnings
+)
+```
+
+# Baseline Tests
+
+## Drop Outs
+
+### Binary Drop Out Status (Yes/No)
+
+```{r}
+#View(data_clean)
+
+table(data_clean$contact_end_reason)
+data_clean$contact_end_reason[data_clean$contact_end_reason == 'PI Drop'] <- 'PT Drop'
+
+data_clean$drop_point <- if_else(data_clean$contact_end_lastvisit == 'EOT' |
+                                   data_clean$contact_end_lastvisit == 'FU', 'Complete', 'Dropout')
+table(data_clean$drop_point, data_clean$contact_treatment)
+
+
+# Perform Fisher's exact test since some cells are less than 5 observations (cannot do chi square)
+chisquare_test <- chisq.test(table(data_clean$drop_point, data_clean$contact_treatment))
+p_value <- chisquare_test$p.value
+
+# Create a proportion barplot for factor variables
+dropouts <- ggplot(data_clean, aes(x = contact_treatment, fill = drop_point)) +
+  geom_bar(position = "fill") + 
+  geom_text(stat = "count", aes(label = scales::percent((..count..)/sum(..count..))), 
+            position = position_fill(vjust = 0.5)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Drop Out Point by Treatment Group - Full Sample",
+       x = "Treatment",
+       y = "Proportion",
+       fill = "End Reason",
+       caption = paste("\nChi-Square Test p-value:", round(p_value, 4))) +
+  theme_minimal() +
+  theme(plot.caption = element_text(hjust = 0.5, face = "italic"))
+print(dropouts)
+
+ggsave(filename = "Baseline/Graphs/dropouts.png", plot = dropouts, width = 8, height = 6)
+
+```
+
+
+### Drop Out Points by Treatment Group
+
+```{r}
+# Perform Fisher's exact test since some cells are less than 5 observations (cannot do chi square)
+fisher_test <- fisher.test(table(data_clean$contact_end_lastvisit, data_clean$contact_treatment))
+p_value <- fisher_test$p.value
+
+# Create a proportion barplot for factor variables
+droppoints <- ggplot(data_clean, aes(x = contact_treatment, fill = contact_end_lastvisit)) +
+  geom_bar(position = "fill") + 
+  geom_text(stat = "count", aes(label = scales::percent((..count..)/sum(..count..))), 
+            position = position_fill(vjust = 0.5)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Drop Out Point by Treatment Group - Full Sample",
+       x = "Treatment",
+       y = "Proportion",
+       fill = "End Point",
+       caption = paste("\nFisher's Exact Test p-value:", round(p_value, 4))) +
+  theme_minimal() +
+  theme(plot.caption = element_text(hjust = 0.5, face = "italic"))
+print(droppoints)
+
+
+ggsave(filename = "Baseline/Graphs/dropoutpoints.png", plot = droppoints, width = 8, height = 6)
+```
+
+
+## Treatment Group Differences
+
+### T-tests & Fisher Tests
+
+* T TEST w Cohen's D
+* Fisher test for categorical tests of differences: can handle subsamples smaller than 5 unlike chisquare
+
+```{r}
+# Define the columns to include
+included_columns <- c('demo_age', 
+                      'demo_sex', 
+                      'contact_ptsd', 
+                      'contact_sleepmed', 
+                      'cns_med',
+                      'Berlin_total_risk',
+                      'mini_etoh_yn', 
+                      'drop_point',
+                      'contact_end_lastvisit', 
+                      'diary_total', 
+                      'bl_eot_time', 
+                      'itype_bl',
+                      'pci_bl',
+                      'tx_adh_mean', 
+                      'tx_sat_sum', 
+                      'ceq_credib',
+                      'isi_bl',
+                      'isi_tx1_diff',
+                      'pcl_bl', 
+                      'pcs_bl', 
+                      'mcs_bl', 
+                      'bpisev_bl',
+                      'bpiinf_bl', 
+                      'phq_bl', 
+                      'dbas_bl', 
+                      'fosq_bl', 
+                      'hit_bl',
+                      'penn_bl', 
+                      'ess_bl', 
+                      'waso_bl_md',
+                      'waso_bl_mn',
+                      'waso_bl_fx_i',
+                      'tib_bl_md',
+                      'tib_bl_mn',
+                      'tst_bl_md',
+                      'tst_bl_mn',
+                      'se_bl_md',
+                      'se_bl_mn',
+                      'sol_bl_md',
+                      'sol_bl_mn',
+                      'sol_bl_fx_i',
+                      'ema_bl_md',
+                      'ema_bl_mn',
+                      'ema_bl_fx_i'#,
+                      
+                      #'isi_tx_diff', 
+                      #'waso_md_tx_diff', 
+                      #'waso_i_tx_diff', 
+                      #'pcs_tx_diff', 
+                      #'mcs_tx_diff', 
+                      #'fosq_tx_diff', 
+                      #'penn_tx_diff', 
+                      #'dbas_tx_diff', 
+                      #'pcl_tx_diff', 
+                      #'hit_tx_diff', 
+                      #'bpisev_tx_diff', 
+                      #'bpiinf_tx_diff',
+                      #'phq_tx_diff', 
+                      #'ess_tx_diff',
+                      #'tib_md_tx_diff', 
+                      #'sol_md_tx_diff', 
+                      #'sol_i_tx_diff',
+                      #'ema_md_tx_diff', 
+                      #'ema_i_tx_diff')
+)
+
+# Exclude certain columns
+exclude_columns <- c("record_id", "contact_treatment")
+
+# Define captions for included columns
+captions <- list(
+  'demo_age' = 'Age Distribution by Treatment Group',
+  'demo_sex' = 'Sex Distribution by Treatment Group',
+  'contact_ptsd' = 'PTSD at Baseline by Treatment Group',
+  'contact_sleepmed' = 'Sleep Meds at Baseline by Treatment Group',
+  'cns_med' = 'CNS Meds at Baseline by Treatment Group',
+  'Berlin_total_risk' = 'Berlin Risk at Baseline by Treatment Group',
+  'mini_etoh_yn' = 'Alcohol Abuse by Treatment Group',
+  'drop_point' = 'Dropout by Treatment Group',
+  'contact_end_lastvisit' = 'Dropout Point by Treatment Group',
+  'diary_total' = 'Total Diaries by Treatment Group',
+  'bl_eot_time' = 'Total Treatment Time by Treatment Group',
+  'itype_bl' = 'Insomnia Type by Treatment Group at Baseline',
+  'pci_bl' = 'Primary Insomnia Concern at Baseline',
+  'tx_adh_mean' = 'Treatment Adherence by Group',
+  'tx_sat_sum' = 'Treatment Satisfaction by Group',
+  'ceq_credib' = 'Credibility Expectancy for Treatment by Group',
+  'isi_bl' = 'ISI at Baseline by Treatment Group',
+  'isi_tx1_diff' = 'Change in ISI between Baseline and Tx1 by Treatment Group',
+  'pcl_bl' = 'PCL at Baseline by Treatment Group',
+  'pcs_bl' = 'SF36 Physical Component at Baseline by Treatment Group',
+  'mcs_bl' = 'SF36 Mental Component at Baseline by Treatment Group',
+  'bpisev_bl' = 'BPI Severity at Baseline by Treatment Group',
+  'bpiinf_bl' = 'BPI Interference at Baseline by Treatment Group',
+  'phq_bl' = 'PHQ8 at Baseline by Treatment Group',
+  'dbas_bl' = 'DBAS at Baseline by Treatment Group',
+  'fosq_bl' = 'FOSQ at Baseline by Treatment Group (reverse score)',
+  'hit_bl' = 'HIT6 at Baseline by Treatment Group',
+  'penn_bl' = 'PENN State Worry at Baseline by Treatment Group',
+  'ess_bl' = 'ESS at Baseline by Treatment Group',
+  'waso_bl_md' = 'Median WASO at Baseline by Treatment Group',
+  'waso_bl_mn' = 'Mean WASO at Baseline by Treatment Group',
+  'waso_bl_fx_i' = 'Proportion WASO 30+ Mins at Baseline by Treatment Group',
+  'tib_bl_md' = 'Median Time in Bed at Baseline by Treatment Group',
+  'tib_bl_mn' = 'Mean Time in Bed at Baseline by Treatment Group',
+  'tst_bl_md' = 'Median Total Sleep Time at Baseline by Treatment Group',
+  'tst_bl_mn' = 'Mean Total Sleep Time at Baseline by Treatment Group',
+  'se_bl_md' = 'Median Sleep Efficiency at Baseline by Treatment Group',
+  'se_bl_mn' = 'Mean Sleep Efficiency at Baseline by Treatment Group',
+  'sol_bl_md' = 'Median Sleep Onset at Baseline by Treatment Group',
+  'sol_bl_mn' = 'Mean Sleep Onset at Baseline by Treatment Group',
+  'sol_bl_fx_i' = 'Proportion SOL 30+ Mins at Baseline by Treatment Group',
+  'ema_bl_md' = 'Median Early Awakening at Baseline by Treatment Group',
+  'ema_bl_mn' = 'Mean Early Awakening at Baseline by Treatment Group',
+  'ema_bl_fx_i' = 'Proportion EMA 30+ Mins at Baseline by Treatment Group'#,
+  #'isi_tx_diff' = 'Change in ISI by Treatment Group',
+  #'waso_md_tx_diff' = 'Change in Median WASO by Treatment Group',
+  #'waso_i_tx_diff' = 'Change in Insomnia Episodes (WASO 30min+) by Treatment Group',
+  #'pcs_tx_diff' = 'Change in SF36 Physical Score by Treatment Group',
+  #'mcs_tx_diff' = 'Change in SF36 Mental Score by Treatment Group',
+  #'fosq_tx_diff' = 'Change in FOSQ by Treatment Group (reverse score)',
+  #'penn_tx_diff' = 'Change in PENN by Treatment Group',
+  #'dbas_tx_diff' = 'Change in DBAS by Treatment Group',
+  #'pcl_tx_diff' = 'Change in PCL by Treatment Group',
+  #'hit_tx_diff' = 'Change in HIT6 by Treatment Group',
+  #'bpisev_tx_diff' = 'Change in BPI Severity by Treatment Group',
+  #'bpiinf_tx_diff' = 'Change in BPI Interference by Treatment Group',
+  #'phq_tx_diff' = 'Change in PHQ by Treatment Group',
+  #'ess_tx_diff' = 'Change in ESS by Treatment Group',
+  #'tib_md_tx_diff' = 'Change in Median TIB by Treatment Group',
+  #'sol_md_tx_diff' = 'Change in Median SOL by Treatment Group',
+  #'sol_i_tx_diff' = 'Change in Insomnia Episodes (SOL 30min+) by Treatment Group',
+  #'ema_md_tx_diff' = 'Change in Median EMA by Treatment Group',
+  #'ema_i_tx_diff' = 'Change in Insomnia Episodes (EMA 30min+) by Treatment Group'
+)
+
+
+# Max sample sizes for each group
+max_samples <- data.frame(contact_treatment = c("CBTI", "CTRL"), 
+                          max_n = c(56, 54))
+
+# Create plots for each variable in the data frame
+for (var in intersect(included_columns, setdiff(names(data_clean), exclude_columns))) {  
+  na_count_total <- sum(is.na(data_clean[[var]]))  # Total NA
+  
+  # Count NA values per treatment group
+  na_count_by_group <- data_clean %>% 
+    group_by(contact_treatment) %>% 
+    summarise(na_count = sum(is.na(.data[[var]])), .groups = 'drop')
+  
+  # Merge with max_samples to calculate the valid counts
+  na_count_by_group <- merge(na_count_by_group, max_samples, by = "contact_treatment")
+  na_count_by_group <- na_count_by_group %>% 
+    mutate(valid_n = max_n - na_count)
+  
+  # Create the caption text
+  na_count_caption <- paste(na_count_by_group %>% 
+                              mutate(caption = paste(contact_treatment, ":", na_count, "NAs")) %>% 
+                              pull(caption), collapse = "; ")
+  valid_n_caption <- paste(na_count_by_group %>% 
+                             mutate(caption = paste("N =", valid_n, contact_treatment)) %>% 
+                             pull(caption), collapse = "; ")
+  caption_text <- paste(na_count_total, "NA values (", na_count_caption, ")\n", valid_n_caption)
+  
+  plot_title <- captions[[var]]
+  
+  if (is.numeric(data_clean[[var]])) {
+    # Perform T-test for numeric data
+    t_test <- t.test(data_clean[[var]] ~ data_clean$contact_treatment)
+    p_value <- t_test$p.value
+    
+    # Calculate effect size (Cohen's d for T-test)
+    cohen_d <- cohens_d(data_clean[[var]], data_clean$contact_treatment)
+    
+    # Get means and SDs for graph lines
+    summary_stats <- data_clean %>%
+      group_by(contact_treatment) %>%
+      summarise(
+        mean_val = mean(.data[[var]], na.rm = TRUE),
+        sd_val = sd(.data[[var]], na.rm = TRUE)
+      )
+    
+    # Create subtitle with means
+    subtitle_text <- sprintf("Means (SD): \nCBTI = %.1f (%.1f), CTRL = %.1f (%.1f)",
+                             summary_stats$mean_val[summary_stats$contact_treatment == "CBTI"],
+                             summary_stats$sd_val[summary_stats$contact_treatment == "CBTI"],
+                             summary_stats$mean_val[summary_stats$contact_treatment == "CTRL"],
+                             summary_stats$sd_val[summary_stats$contact_treatment == "CTRL"])
+    
+    # Create a grouped boxplot for numeric variables
+    p <- ggplot(data_clean, aes(x = contact_treatment, y = .data[[var]], fill = contact_treatment)) +
+      geom_boxplot() +
+      geom_jitter(height = 0, width = 0.1) +
+      # Add mean labels
+      geom_text(data = summary_stats,
+                aes(x = contact_treatment, 
+                    y = Inf,
+                    label = sprintf("Mean = %.1f", mean_val)),
+                vjust = -1.5,  # Adjusted to make room for SD
+                color = "black",
+                size = 4) +
+      # Add SD labels
+      geom_text(data = summary_stats,
+                aes(x = contact_treatment, 
+                    y = Inf,
+                    label = sprintf("SD = %.1f", sd_val)),
+                vjust = -0.5,
+                color = "black",
+                size = 4) +
+      labs(title = plot_title,
+           subtitle = subtitle_text,
+           x = "Treatment",
+           y = var,
+           caption = paste(caption_text, 
+                           "\nT-test p-value:", round(p_value, 4),
+                           "\nEffect size (Cohen's d):", round(cohen_d$Cohens_d, 4),
+                           "\nDegrees of freedom:", t_test$parameter)) +
+      theme_minimal() +
+      theme(
+        plot.caption = element_text(hjust = 0.5, face = "italic"),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.position = "right",
+        panel.grid.minor = element_blank()
+      )
+    
+    # Save the plot as a .png file
+    print(p)
+    # Define the save path
+    save_path <- file.path(base_path, "Baseline", "Graphs")
+
+
+    # Save the plot as a .png file
+    ggsave(filename = file.path(save_path, paste0(var, ".png")), 
+          plot = p, 
+          width = 8, 
+          height = 6)
+    
+  # For categorical variables
+} else if (is.factor(data_clean[[var]]) || is.character(data_clean[[var]])) {
+    # Convert to factor if character
+    if (is.character(data_clean[[var]])) {
+      data_clean[[var]] <- as.factor(data_clean[[var]])
+    }
+    
+    # Remove levels with zero frequency
+    data_clean[[var]] <- droplevels(data_clean[[var]])
+    
+    # Create a contingency table
+    contingency_table <- table(data_clean$contact_treatment, data_clean[[var]])
+    
+    # Perform Fisher-Exact Test
+    fisher_test <- fisher.test(contingency_table, simulate.p.value = TRUE)
+    p_value <- fisher_test$p.value
+    
+    # Calculate proportions
+    prop_data <- data_clean %>%
+      group_by(contact_treatment, .data[[var]]) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      group_by(contact_treatment) %>%
+      mutate(prop = count/sum(count))
+    
+    # Create a proportion barplot for factor variables
+    p2 <- ggplot(prop_data, aes(x = contact_treatment, y = prop, fill = .data[[var]])) +
+      geom_bar(stat = "identity", position = "stack") +  # Changed to "stack" from "fill"
+      geom_text(aes(label = count),  # Changed to count from prop
+                position = position_stack(vjust = 0.5)) +
+      #scale_y_continuous(breaks = seq(0, max(prop_data$count), by = 5)) +  # Adjust 'by' value as needed
+      labs(title = plot_title,
+           x = "Treatment",
+           y = "Proportion of Sample",
+           fill = var,
+           caption = paste(caption_text, 
+                         "\nFisher-Exact p-value:", round(p_value, 4))) +
+      theme_minimal() +
+      theme(
+        plot.caption = element_text(hjust = 0.5, face = "italic"),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        panel.grid.minor = element_blank()
+      )
+    
+    print(p2)
+    # Save the plot as a .png file
+    ggsave(filename = file.path(save_path, paste0(var, ".png")), 
+          plot = p2, 
+          width = 8, 
+          height = 6)
+}
+}
+
+```
+
+#### Output Table of Descriptives of Raw Data
+
+```{r}
+# Summarize numerical variables by treatment group
+numerical_summary <- data_clean %>%
+  select(contact_treatment, all_of(included_columns)) %>%
+  group_by(contact_treatment) %>%
+  summarise(across(where(is.numeric), 
+                   list(mean = ~ round(mean(. , na.rm = TRUE),4), 
+                        sd = ~ round(sd(. , na.rm = TRUE),4))))
+
+# Pivot longer to get into 4-column format
+numerical_long <- numerical_summary %>%
+  pivot_longer(
+    cols = -contact_treatment,
+    names_to = c("variable", ".value"),
+    names_pattern = "(.*)_(mean|sd)"
+  )
+
+# Display the reformatted data in a readable format
+numerical_long <- numerical_long %>%
+  arrange(variable, contact_treatment)  # Sort by variable and contact_treatment
+
+# Optional: Save the long-format data to a file
+write.csv(numerical_long, "Baseline/Results/baseline_mean_sd_table.csv")
+```
+
+
+#### Statistical Test Results
+
+```{r}
+# Initialize an empty dataframe to store the results
+test_results <- data.frame(variable = character(), 
+                           test = character(), 
+                           p_value = numeric(), 
+                           d_effect = numeric(),
+                           d_interp = character(),
+                           CI95Low = numeric(), 
+                           CI95High = numeric(), 
+                           mean_cbti_raw = numeric(), 
+                           mean_ctrl_raw = numeric(),
+                           sd_cbti_raw = numeric(),
+                           sd_ctrl_raw = numeric(),
+                           odds_ratio = numeric(),
+                           OR_CI95Low = numeric(),
+                           OR_CI95High = numeric(),
+                           stringsAsFactors = FALSE)
+
+# Initialize a list to store p-values
+p_values_list <- list()
+
+# First loop to calculate p-values and store them
+for (var in setdiff(included_columns, exclude_columns)) {
+  if (is.numeric(data_clean[[var]])) {
+    # Perform T-test for numeric data
+    t_test <- t.test(data_clean[[var]] ~ data_clean$contact_treatment)
+    p_value <- t_test$p.value
+    p_values_list[[var]] <- p_value
+  } else if (is.factor(data_clean[[var]])) {
+    # Perform Fisher's Exact Test for categorical data
+    fisher_test <- fisher.test(table(data_clean[[var]], data_clean$contact_treatment))
+    p_value <- fisher_test$p.value
+    p_values_list[[var]] <- p_value
+  }
+}
+
+# Second loop to calculate effect sizes, means, standard deviations, CIs, and store the results
+for (var in setdiff(included_columns, exclude_columns)) {
+  p_value <- round(p_values_list[[var]], 4)
+  
+  if (is.numeric(data_clean[[var]])) {
+    # Perform T-test for numeric data (again for effect size calculation and CI)
+    t_test <- t.test(data_clean[[var]] ~ data_clean$contact_treatment)
+    
+    ci_low <- round(t_test$conf.int[1], 4)
+    ci_high <- round(t_test$conf.int[2], 4)
+    
+    # Calculate effect size (Cohen's d for T-test)
+    cohen_d <- cohens_d(data_clean[[var]], data_clean$contact_treatment)
+    effect_size <- round(cohen_d$Cohens_d, 4)
+    
+    # Determine the interpretation of Cohen's d using the absolute value
+    if (!is.na(effect_size)) {
+      d_interp <- ifelse(abs(effect_size) < 0.2, "negligible",
+                  ifelse(abs(effect_size) < 0.5, "small",
+                  ifelse(abs(effect_size) < 0.8, "medium",
+                  ifelse(abs(effect_size) < 1.2, "large", "xlarge"))))
+    } else {
+      d_interp <- NA
+    }
+    
+    # Calculate raw mean and standard deviation values for each treatment group
+    stats_raw <- data_clean %>%
+      group_by(contact_treatment) %>%
+      summarise(mean_value_raw = mean(.data[[var]], na.rm = TRUE),
+                sd_value_raw = sd(.data[[var]], na.rm = TRUE))
+    
+    mean_cbti_raw <- round(stats_raw %>% filter(contact_treatment == "CBTI") %>% pull(mean_value_raw), 4)
+    mean_ctrl_raw <- round(stats_raw %>% filter(contact_treatment == "CTRL") %>% pull(mean_value_raw), 4)
+    
+    sd_cbti_raw <- round(stats_raw %>% filter(contact_treatment == "CBTI") %>% pull(sd_value_raw), 4)
+    sd_ctrl_raw <- round(stats_raw %>% filter(contact_treatment == "CTRL") %>% pull(sd_value_raw), 4)
+    
+    # Add the results to the test_results dataframe
+    test_results <- test_results %>% add_row(
+      variable = var, 
+      test = "t-test", 
+      p_value = p_value,
+      d_effect = effect_size, 
+      d_interp = d_interp,
+      CI95Low = ci_low, 
+      CI95High = ci_high, 
+      mean_cbti_raw = mean_cbti_raw, 
+      mean_ctrl_raw = mean_ctrl_raw,
+      sd_cbti_raw = sd_cbti_raw,
+      sd_ctrl_raw = sd_ctrl_raw,
+      odds_ratio = NA,
+      OR_CI95Low = NA,
+      OR_CI95High = NA
+    )
+  } else if (is.factor(data_clean[[var]]) && length(levels(data_clean[[var]])) == 2) {
+    # Perform Fisher's Exact Test for two-level categorical variables
+    fisher_test <- fisher.test(table(data_clean[[var]], data_clean$contact_treatment))
+    
+    # Calculate odds ratios and confidence intervals for two-level categorical variables
+    odds_ratio <- round(fisher_test$estimate, 4)
+    or_ci_low <- round(fisher_test$conf.int[1], 4)
+    or_ci_high <- round(fisher_test$conf.int[2], 4)
+    
+    # Add the results to the test_results dataframe
+    test_results <- test_results %>% add_row(
+      variable = var, 
+      test = "fisher-test", 
+      p_value = p_value,
+      d_effect = NA, 
+      d_interp = NA,
+      CI95Low = NA, 
+      CI95High = NA, 
+      mean_cbti_raw = NA, 
+      mean_ctrl_raw = NA,
+      sd_cbti_raw = NA, 
+      sd_ctrl_raw = NA,
+      odds_ratio = odds_ratio,
+      OR_CI95Low = or_ci_low,
+      OR_CI95High = or_ci_high
+    )
+  } else if (is.factor(data_clean[[var]])) {
+    # Perform Fisher's Exact Test for multi-level categorical variables without calculating odds ratio
+    fisher_test <- fisher.test(table(data_clean[[var]], data_clean$contact_treatment))
+    
+    # Add the results to the test_results dataframe without odds ratios
+    test_results <- test_results %>% add_row(
+      variable = var, 
+      test = "fisher-test", 
+      p_value = p_value,
+      d_effect = NA, 
+      d_interp = NA,
+      CI95Low = NA, 
+      CI95High = NA, 
+      mean_cbti_raw = NA, 
+      mean_ctrl_raw = NA,
+      sd_cbti_raw = NA, 
+      sd_ctrl_raw = NA,
+      odds_ratio = NA,
+      OR_CI95Low = NA,
+      OR_CI95High = NA
+    )
+  }
+}
+
+# Print the test_results dataframe
+kable(test_results)
+
+# Save data to PP folder
+write.csv(test_results, "Baseline/Results/baseline_stat_test_results.csv", row.names = FALSE)
+```
+
+
+## Save Clean Data
+
+```{r}
+write.csv(data_clean, file = "MasterFiles/Data/data_clean.csv", row.names=F)
+```
+

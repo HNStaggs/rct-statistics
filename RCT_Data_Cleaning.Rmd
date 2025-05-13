@@ -1,0 +1,1920 @@
+---
+title: "Clinical Trial Analysis"
+author: "Halee Staggs"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 5
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+# Set global chunk options
+knitr::opts_chunk$set(
+  echo = TRUE,     # If false, do not show the R code , true=show code
+  include = TRUE,   # Show the output and results
+  message = FALSE,  # Suppress messages
+  warning = FALSE   # Suppress warnings
+)
+```
+
+# Project Setup and Data
+
+## Set working directory where you want the project saved
+
+```{r}
+setwd("~/VAE-Clinical-Trial")  # Name of project folder in my file directory
+base_path <- "C:/Users/halee/OneDrive/Documents/VAE-Clinical-Trial"  # Path of project folder
+```
+
+## Create Folders Needed for Project - can rerun if you add new folders
+
+```{r}
+# Function the creates directory tree
+# Add new folder names and rerun as needed
+create_project_folders <- function(base_path) {
+  folders <- c(
+    "ConferenceMaterials/Figures",
+    "ConferenceMaterials/Tables",
+    "Descriptives",
+    "ExtraData",
+    "MasterFiles/Code",
+    "MasterFiles/Data",
+    "Baseline/Results",
+    "Baseline/Graphs",
+    "ITT",
+    "ITT/Results",
+    "ITT/Data",
+    "ITT/Graphs",
+    "PP/EndofTreatment",
+    "PP/EndofTreatment/Data",
+    "PP/EndofTreatment/TTests",
+    "PP/EndofTreatment/TTests/Graphs",
+    "PP/EndofTreatment/TTests/Results",
+    "PP/EndofTreatment/LMERS",
+    "PP/EndofTreatment/LMERS/Graphs",
+    "PP/EndofTreatment/LMERS/Results",
+    "PP/EndofTreatment/Moderators",
+    "PP/EndofTreatment/Mediators",
+    "PP/FollowUp",
+    "PP/FollowUp/Data",
+    "PP/FollowUp/LMERS",
+    "PP/FollowUp/LMERS/Graphs",
+    "PP/FollowUp/LMERS/Results",
+    "PP/FollowUp/Moderators",
+    "PP/FollowUp/Mediators",
+    "Reports"
+  )
+  
+  # Create each folder
+  for(folder in folders) {
+    dir_path <- file.path(base_path, folder)
+    
+    # Check if directory exists before creating
+    if(!dir.exists(dir_path)) {
+      dir.create(dir_path, recursive = TRUE)
+      cat("Created:", dir_path, "\n")
+    } else {
+      cat("Already exists:", dir_path, "\n")
+    }
+  }
+  
+  cat("\nFolder structure creation complete!\n")
+}
+
+create_project_folders(base_path)
+```
+
+
+## Load packages
+
+```{r}
+# Load libraries to project
+library(MASS)
+library(tidyverse)
+library(tidyr)
+library(corrplot)
+library(ggplot2)
+library(dunn.test)
+library(caret)
+library(effectsize)
+library(fs)
+library(mice)
+library(purrr)
+library(car)
+library(sjPlot)
+library(sjmisc)
+library(Hmisc)
+library(knitr)
+library(mediation)
+library(conflicted)
+library(ez)
+library(rlang)
+library(lme4)
+library(broom.mixed)
+library(lmerTest)
+library(effects) 
+library(emmeans)
+library(lattice)
+library(ggeffects)
+library(stats)
+library(lavaan)
+library(semPlot)
+library(dplyr)
+library(interactions)
+library(gridExtra)
+library(rmarkdown)
+library(car)
+library(gt)
+library(webshot2)  # for saving as PNG
+
+# Set preference for select from dplyr
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+conflicted::conflict_prefer("read_csv", "dplyr")
+conflicted::conflict_prefer("margin", "ggplot2")
+conflicted::conflict_prefer("lmer", "lmerTest")
+```
+
+## Load dataset
+
+```{r}
+data <- read_csv('MasterFiles/Data/sw_data.csv')  # Use this once data is moved to this folder
+#View(data)
+```
+
+
+# Collapse Longitudinal Variables into readable format for analysis
+
+## Single timepoint measures
+
+```{r}
+# Age
+data_age <- data %>% 
+  filter(!is.na(demo_age)) %>% 
+  select(record_id, demo_age)
+#summary(data_age)
+
+# Sex
+data_sex <- data %>% 
+  filter(!is.na(demo_sex)) %>% 
+  select(record_id, demo_sex)
+#summary(data_sex)
+
+# Ethnicity
+data_ethnic <- data %>% 
+  filter(!is.na(demo_ethnic)) %>% 
+  select(record_id, demo_ethnic)
+#summary(data_ethnic)
+
+# Race
+data_race <- data %>% 
+  filter(!is.na(demo_race)) %>% 
+  select(record_id, demo_race)
+#summary(data_race)
+
+# Degree
+data_deg <- data %>% 
+  filter(!is.na(demo_deg)) %>% 
+  select(record_id, demo_deg)
+#summary(data_deg)
+
+
+# Treatment assigned
+data_tx <- data %>% 
+  filter(!is.na(contact_treatment)) %>% 
+  select(record_id, contact_treatment)
+#summary(data_tx)
+
+
+# Treatment adherence CBTI
+data$tx_adh_cbt_mean <- rowMeans(data %>% 
+                            select(txadh_cbt_follow_worry,
+         txadh_cbt_follow_activity,
+         txadh_cbt_follow_alcohol,
+         txadh_cbt_follow_ask,
+         txadh_cbt_follow_bed,
+         txadh_cbt_follow_bedtime,
+         txadh_cbt_follow_buffer,
+         txadh_cbt_follow_caffeine,
+         txadh_cbt_follow_clock,
+         txadh_cbt_follow_diary,
+         txadh_cbt_follow_environ,
+         txadh_cbt_follow_exercise,
+         txadh_cbt_follow_factors,
+         txadh_cbt_follow_fatigue,
+         txadh_cbt_follow_forced,
+         txadh_cbt_follow_meal,
+         txadh_cbt_follow_myths,
+         txadh_cbt_follow_nap,
+         txadh_cbt_follow_oob,
+         txadh_cbt_follow_other,
+         txadh_cbt_follow_sleep,
+         txadh_cbt_follow_sleepy,
+         txadh_cbt_follow_smoking,
+         txadh_cbt_follow_snack,
+         txadh_cbt_follow_think,
+         txadh_cbt_follow_tib,
+         txadh_cbt_follow_try,
+         txadh_cbt_follow_waketime,
+         txadh_cbt_follow_worry),
+         na.rm = TRUE)
+
+data_txadh_cbti <- data %>%
+  filter(!is.na(tx_adh_cbt_mean)) %>% 
+  select(record_id, tx_adh_cbt_mean)
+#summary(data_txadh_cbti)
+#View(data_txadh_cbti)
+
+# Treatment adherence CTRL
+data$tx_adh_abt_mean <- rowMeans(data %>% 
+                            select(txadh_abt_follow_alcohol,
+         txadh_abt_follow_caffeine,
+         txadh_abt_follow_cycle,
+         txadh_abt_follow_diary,
+         txadh_abt_follow_environ,
+         txadh_abt_follow_exercise,
+         txadh_abt_follow_meal,
+         txadh_abt_follow_other,
+         txadh_abt_follow_pairing,
+         txadh_abt_follow_smoking),
+         na.rm = TRUE)
+
+data_txadh_ctrl <- data %>%
+  filter(!is.na(tx_adh_abt_mean)) %>% 
+  select(record_id, tx_adh_abt_mean)
+#summary(data_txadh_ctrl)
+#View(data_txadh_ctrl)
+
+
+# Combine Tx Adherence into One Variable
+data_txadh_cbti <- data_txadh_cbti %>%
+  filter(!(record_id %in% c('SW190', 'SW193')))
+
+data_txadh_ctrl <- data_txadh_ctrl %>%
+  filter(record_id != 'SW195')
+  
+colnames(data_txadh_cbti)[2] <- 'tx_adh_mean'
+colnames(data_txadh_ctrl)[2] <- 'tx_adh_mean'
+data_txadh <- bind_rows(data_txadh_cbti, data_txadh_ctrl)
+#View(data_txadh)
+
+# Treatment Satisfaction
+data$tx_sat_sum <- rowSums(data %>% 
+                            select(tx_sat_1,
+                                   tx_sat_2),
+                           na.rm = TRUE)
+data_tx_sat <- data %>%
+  filter(tx_sat_sum >= 2) %>%
+  select(record_id, tx_sat_sum)
+
+#summary(data_tx_sat)
+
+# Credibility Expectancy Questionnaire
+data_ceq <- data %>%
+  filter(!is.na(ceq_credib) & (ceq_credib > 10)) %>%
+  select(record_id, ceq_credib)
+
+#summary(data_ceq)
+```
+
+## Medication Data
+
+```{r}
+# Designation of med having effect on CNS (Yes/No)
+data_meds <- read_csv('ExtraData/sw_cns_active_meds.csv')
+#View(data_meds)
+colnames(data_meds)[1] <- "record_id"
+colnames(data_meds)[2] <- "cns_med"
+data_meds <- data_meds %>% select(record_id, cns_med)
+```
+
+## Berlin Data
+
+```{r}
+berlin <- read_csv("ExtraData/berlin.csv")
+#View(berlin)
+data_berlin <- berlin %>% select(record_id, Berlin_total_risk)
+
+```
+
+## Double timepoint measures: WAI - Tx2 and Tx6
+
+```{r}
+## Tx2
+wai_t_2 <- data %>% 
+  filter(redcap_event_name == 'treatment_2_arm_2') %>% 
+  select(record_id, wai_t_total) %>%
+  rename(record_id = record_id,
+         wai_t_total2 = wai_t_total)
+
+## Tx6
+wai_t_6 <- data %>% 
+  filter(redcap_event_name == 'treatment_6_arm_2') %>% 
+  select(record_id, wai_t_total) %>%
+  rename(record_id = record_id,
+         wai_t_total6 = wai_t_total)
+
+# Working alliance - participant
+
+## Tx2
+wai_p_2 <- data %>% 
+  filter(redcap_event_name == 'treatment_2_arm_2') %>% 
+  select(record_id, wai_p_total) %>%
+  rename(record_id = record_id, 
+         wai_p_total2 = wai_p_total)
+
+## Tx6
+wai_p_6 <- data %>% 
+  filter(redcap_event_name == 'treatment_6_arm_2') %>% 
+  select(record_id, wai_p_total) %>%
+  rename(record_id = record_id,
+         wai_p_total6 = wai_p_total)
+
+```
+
+## Triple timepoint measures: baseline, end of treatment, follow up
+
+```{r}
+# PCL score at baseline
+data_ptsd_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, pcl_part3_total) %>%
+  rename(pcl_bl = pcl_part3_total)
+data_ptsd_bl <- drop_na(data_ptsd_bl)
+#summary(data_ptsd_bl)
+
+# PCL score at end-of-treatment
+data_ptsd_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, pcl_part3_total) %>%
+  rename(pcl_eot = pcl_part3_total)
+data_ptsd_eot <- drop_na(data_ptsd_eot)
+#summary(data_ptsd_eot)
+
+# PCL score at follow up
+data_ptsd_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, pcl_part3_total) %>% 
+  rename(pcl_fu = pcl_part3_total)
+data_ptsd_fu <- drop_na(data_ptsd_fu)
+#summary(data_ptsd_fu)
+
+# ISI score at baseline
+data_isi_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, ins_sev_total) %>% rename(isi_bl = ins_sev_total)
+data_isi_bl <- drop_na(data_isi_bl)
+#summary(data_isi_bl)
+
+# ISI score at Tx1
+data_isi_tx1 <- data %>% 
+  filter(redcap_event_name == 'treatment_1_arm_2') %>% 
+  select(record_id, ins_sev_total) %>% rename(isi_tx1 = ins_sev_total)
+data_isi_tx1 <- drop_na(data_isi_tx1)
+#summary(data_isi_tx1)
+
+# ISI score at end-of-treatment
+data_isi_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, ins_sev_total) %>% rename(isi_eot = ins_sev_total)
+data_isi_eot <- drop_na(data_isi_eot)
+#summary(data_isi_eot)
+
+# ISI score at follow up
+data_isi_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, ins_sev_total) %>% rename(isi_fu = ins_sev_total)
+data_isi_fu <- drop_na(data_isi_fu)
+#summary(data_isi_fu)
+
+# Self-Report Insomnia Types
+data$isi_1_bi <- if_else(data$isi_1 > 0, 'I', NA)
+data$isi_2_bi <- if_else(data$isi_2 > 0, 'M', NA)
+data$isi_3_bi <- if_else(data$isi_3 > 0, 'T', NA)
+string_cols <- c('isi_1_bi', 'isi_2_bi', 'isi_3_bi')
+data$isi_type <- apply(data[, string_cols],1,function(x){
+  paste(na.omit(x), collapse =" ")})# View the result
+
+# Insomnia type at baseline 
+data_itype_bl <- data %>%
+  filter(isi_type != '' & redcap_event_name == 'baseline_arm_2') %>%
+  select(record_id, isi_type) %>%
+  rename(itype_bl = isi_type)
+data_itype_bl <- drop_na(data_itype_bl)
+#summary(data_itype_bl)
+
+# Insomnia type at EOT
+data_itype_eot <- data %>%
+  filter(isi_type != '' & redcap_event_name == 'end_of_treatment_arm_2') %>%
+  select(record_id, isi_type) %>%
+  rename(itype_eot = isi_type)
+data_itype_eot <- drop_na(data_itype_eot)
+#summary(data_itype_eot)
+
+# Insomnia type at follow up
+data_itype_fu <- data %>%
+  filter(isi_type != '' & redcap_event_name == '6_month_followup_arm_2') %>%
+  select(record_id, isi_type) %>%
+  rename(itype_fu = isi_type)
+data_itype_fu <- drop_na(data_itype_fu)
+#summary(data_itype_fu)
+
+
+# Primary concern variable creation
+determine_primary_concern <- function(data) {
+  # Create empty vector to store results
+  primary_concern <- character(nrow(data))
+  
+  for(i in 1:nrow(data)) {
+    # Get values for each row
+    i_val <- data$isi_1[i]
+    m_val <- data$isi_2[i]
+    t_val <- data$isi_3[i]
+    
+    # Find maximum value
+    max_val <- max(i_val, m_val, t_val)
+    
+    # Determine which variables equal the maximum
+    is_max <- c(
+      'I' = i_val == max_val,
+      'M' = m_val == max_val,
+      'T' = t_val == max_val
+    )
+    
+    # Concatenate letters for all maximum values
+    primary_concern[i] <- paste(names(is_max)[is_max], collapse="")
+  }
+  
+  return(primary_concern)
+}
+
+# Apply function to data
+data$pci <- determine_primary_concern(data)
+
+# Primary concern insomnia at baseline 
+data_pci_bl <- data %>%
+  filter(pci != '' & redcap_event_name == 'baseline_arm_2') %>%
+  select(record_id, pci) %>%
+  rename(pci_bl = pci) %>%
+  group_by(record_id) %>%
+  slice(1) %>%
+  ungroup()
+#View(data_pci_bl)
+
+# Primary concern insomnia at EOT
+data_pci_eot <- data %>%
+  filter(pci != '' & redcap_event_name == 'end_of_treatment_arm_2') %>%
+  select(record_id, pci) %>%
+  rename(pci_eot = pci) %>%
+  group_by(record_id) %>%
+  slice(1) %>%
+  ungroup()
+#View(data_pci_eot)
+
+# Primary concern insomnia at follow up
+data_pci_fu <- data %>%
+  filter(pci != '' & redcap_event_name == '6_month_followup_arm_2') %>%
+  select(record_id, pci) %>%
+  rename(pci_fu = pci) %>%
+  group_by(record_id) %>%
+  slice(1) %>%
+  ungroup()
+#View(data_pci_fu)
+
+# SF36 PCS at baseline
+data_pcs_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, vr36_trans_phys) %>%
+  rename(pcs_bl = vr36_trans_phys)
+data_pcs_bl <- drop_na(data_pcs_bl)
+#summary(data_pcs_bl)
+
+# SF36 PCS at EOT
+data_pcs_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, vr36_trans_phys) %>%
+  rename(pcs_eot = vr36_trans_phys)
+data_pcs_eot <- drop_na(data_pcs_eot)
+#summary(data_pcs_eot)
+
+# SF36 PCS at FU
+data_pcs_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, vr36_trans_phys) %>%
+  rename(pcs_fu = vr36_trans_phys)
+data_pcs_fu <- drop_na(data_pcs_fu)
+#summary(data_pcs_fu)
+
+# SF36 MCS at baseline
+data_mcs_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, vr36_trans_mental) %>%
+  rename(mcs_bl = vr36_trans_mental)
+data_mcs_bl <- drop_na(data_mcs_bl)
+#summary(data_mcs_bl)
+
+# SF36 MCS at EOT
+data_mcs_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, vr36_trans_mental) %>%
+  rename(mcs_eot = vr36_trans_mental)
+data_mcs_eot <- drop_na(data_mcs_eot)
+#summary(data_mcs_eot)
+
+# SF36 MCS at FU
+data_mcs_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, vr36_trans_mental) %>%
+  rename(mcs_fu = vr36_trans_mental)
+data_mcs_fu <- drop_na(data_mcs_fu)
+#summary(data_mcs_fu)
+
+# BPI severity at baseline
+data_bpisev_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, bpi_severity) %>%
+  rename(bpisev_bl = bpi_severity)
+data_bpisev_bl <- drop_na(data_bpisev_bl)
+#summary(data_bpisev_bl)
+
+# BPI severity at EOT
+data_bpisev_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, bpi_severity) %>%
+  rename(bpisev_eot = bpi_severity)
+data_bpisev_eot <- drop_na(data_bpisev_eot)
+#summary(data_bpisev_eot)
+
+# BPI severity at FU
+data_bpisev_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, bpi_severity) %>%
+  rename(bpisev_fu = bpi_severity)
+data_bpisev_fu <- drop_na(data_bpisev_fu)
+#summary(data_bpisev_fu)
+
+
+# BPI interference at baseline
+data_bpiinf_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, pain_interference) %>%
+  rename(bpiinf_bl = pain_interference)
+data_bpiinf_bl <- drop_na(data_bpiinf_bl)
+#summary(data_bpiinf_bl)
+
+
+# BPI interference at EOT
+data_bpiinf_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, pain_interference) %>%
+  rename(bpiinf_eot = pain_interference)
+data_bpiinf_eot <- drop_na(data_bpiinf_eot)
+#summary(data_bpiinf_eot)
+
+
+# BPI interference at FU
+data_bpiinf_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, pain_interference) %>%
+  rename(bpiinf_fu = pain_interference)
+data_bpiinf_fu <- drop_na(data_bpiinf_fu)
+#summary(data_bpiinf_fu)
+
+# PHQ8 at baseline
+data_phq_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, phq8_score) %>%
+  rename(phq_bl = phq8_score)
+data_phq_bl <- drop_na(data_phq_bl)
+#summary(data_phq_bl)
+
+# PHQ8 at EOT
+data_phq_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, phq8_score) %>%
+  rename(phq_eot = phq8_score)
+data_phq_eot <- drop_na(data_phq_eot)
+#summary(data_phq_eot)
+
+# PHQ8 at FU
+data_phq_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, phq8_score) %>%
+  rename(phq_fu = phq8_score)
+data_phq_fu <- drop_na(data_phq_fu)
+#summary(data_phq_fu)
+
+# DBAS at baseline
+data_dbas_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, dbas_total) %>% 
+  rename(dbas_bl = dbas_total)
+data_dbas_bl <- drop_na(data_dbas_bl)
+#summary(data_dbas_bl)
+ 
+# DBAS at EOT
+data_dbas_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, dbas_total) %>% 
+  rename(dbas_eot = dbas_total)
+data_dbas_eot <- drop_na(data_dbas_eot)
+#summary(data_dbas_eot)
+
+# DBAS at FU
+data_dbas_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, dbas_total) %>% 
+  rename(dbas_fu = dbas_total)
+data_dbas_fu <- drop_na(data_dbas_fu)
+#summary(data_dbas_fu)
+
+# FOSQ at baseline
+data_fosq_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, fosq_total) %>% 
+  rename(fosq_bl = fosq_total)
+data_fosq_bl <- drop_na(data_fosq_bl)
+#summary(data_fosq_bl)
+ 
+# FOSQ at EOT
+data_fosq_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, fosq_total) %>% 
+  rename(fosq_eot = fosq_total)
+data_fosq_eot <- drop_na(data_fosq_eot)
+#summary(data_fosq_eot)
+
+# FOSQ at FU
+data_fosq_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, fosq_total) %>% 
+  rename(fosq_fu = fosq_total)
+data_fosq_fu <- drop_na(data_fosq_fu)
+#summary(data_fosq_fu)
+
+
+# HIT6 at baseline
+data_hit_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, hit6_total) %>% 
+  rename(hit_bl = hit6_total)
+data_hit_bl <- drop_na(data_hit_bl)
+#summary(data_hit_bl)
+ 
+# HIT6 at EOT
+data_hit_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, hit6_total) %>% 
+  rename(hit_eot = hit6_total)
+data_hit_eot <- drop_na(data_hit_eot)
+#summary(data_hit_eot)
+
+# HIT6 at FU
+data_hit_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, hit6_total) %>% 
+  rename(hit_fu = hit6_total)
+data_hit_fu <- drop_na(data_hit_fu)
+#summary(data_hit_fu)
+
+# PENN at baseline
+data_penn_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, penn_total) %>% 
+  rename(penn_bl = penn_total)
+data_penn_bl <- drop_na(data_penn_bl)
+#summary(data_penn_bl)
+ 
+# PENN at EOT
+data_penn_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, penn_total) %>% 
+  rename(penn_eot = penn_total)
+data_penn_eot <- drop_na(data_penn_eot)
+#summary(data_penn_eot)
+
+# PENN at FU
+data_penn_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, penn_total) %>% 
+  rename(penn_fu = penn_total)
+data_penn_fu <- drop_na(data_penn_fu)
+#summary(data_penn_fu)
+
+
+# ESS at baseline
+data_ess_bl <- data %>% 
+  filter(redcap_event_name == 'baseline_arm_2') %>% 
+  select(record_id, epworth_total) %>% 
+  rename(ess_bl = epworth_total)
+data_ess_bl <- drop_na(data_ess_bl)
+#summary(data_ess_bl)
+
+# ESS at EOT
+data_ess_eot <- data %>% 
+  filter(redcap_event_name == 'end_of_treatment_arm_2') %>% 
+  select(record_id, epworth_total) %>% 
+  rename(ess_eot = epworth_total)
+data_ess_eot <- drop_na(data_ess_eot)
+#summary(data_ess_eot)
+
+# ESS at FU
+data_ess_fu <- data %>% 
+  filter(redcap_event_name == '6_month_followup_arm_2') %>% 
+  select(record_id, epworth_total) %>% 
+  rename(ess_fu = epworth_total)
+data_ess_fu <- drop_na(data_ess_fu)
+#summary(data_ess_fu)
+
+
+```
+
+
+## Diary Timepoints - At baseline, Tx1 through Tx6, EOT, and follow up 
+
+### Fill Missing Values with Zero Minutes for downstream calculations
+
+```{r}
+# Sleep Onset Latency - if skipped because did not apply to Vet, then value of zero minutes
+data$sd_sl[is.na(data$sd_sl)] <- 0
+
+# Wake after sleep onset - if skipped because did not apply to Vet, then value of zero minutes
+data$sd_waso[is.na(data$sd_waso)] <- 0
+
+# Early Morning Awakening - if skipped because did not apply to Vet, then value of zero minutes
+data$sd_ema[is.na(data$sd_ema)] <- 0
+```
+
+### Total Diaries
+
+```{r}
+# Total number of diaries for each participant
+diary_sum <- data %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary')) %>% 
+  group_by(record_id) %>% 
+  select(record_id, redcap_repeat_instance) %>% 
+  summarise(diary_total = sum(redcap_repeat_instance > 0)) 
+#diary_sum
+```
+
+### WASO Metrics
+
+```{r}
+# All WASO entries across all diaries - look for outliers
+waso_raw <- data %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary')) %>% 
+  select(record_id, sd_waso)
+#summary(waso_raw$sd_waso)
+
+# Fix WASO outliers
+# What do we consider a reasonable sleep effort timeframe? 
+# 8 hours? 10 hours? Will determine cleaning of outliers.
+# Used 10 hours as cutoff here
+waso_raw$sd_waso[waso_raw$sd_waso == 2000] <- 200
+waso_raw$sd_waso[waso_raw$sd_waso == 760] <- 76
+
+#summary(waso_raw$sd_waso)
+#boxplot(waso_raw$sd_waso)
+
+# Summed WASO across all diaries for each participant, 
+# i.e., total time awake at night across all entries
+waso_sum <- waso_raw %>% 
+  filter(!is.na(sd_waso)) %>% 
+  group_by(record_id) %>% 
+  summarise(waso_sum = sum(sd_waso))
+#boxplot(waso_sum$waso_sum)
+```
+
+#### WASO by treatment milestone (baseline/EOT/FU) 
+
+```{r}
+# WASO calculations
+waso_metrics <- data %>%
+  group_by(record_id) %>%
+  fill(contact_baseline_date, .direction = "downup") %>%
+  fill(contact_tx1_date, .direction = "downup") %>%
+  fill(contact_tx2_date, .direction = "downup") %>%
+  fill(contact_tx3_date, .direction = "downup") %>%
+  fill(contact_tx4_date, .direction = "downup") %>%
+  fill(contact_tx5_date, .direction = "downup") %>%
+  fill(contact_tx6_date, .direction = "downup") %>%
+  fill(contact_etx_date, .direction = "downup") %>%
+  fill(contact_6mfu_date, .direction = "downup") %>%
+  ungroup() %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary') & 
+           !is.na(sd_waso) & !is.na(sd_am_date)) %>%
+  select(record_id, sd_waso, sd_am_date, contact_tx1_date, contact_tx6_date, 
+         contact_etx_date, contact_6mfu_date, contact_end_date) 
+
+
+# Baseline
+waso_bl <- waso_metrics %>% 
+  filter(sd_am_date <= contact_tx1_date) %>%
+  group_by(record_id) %>%
+  summarise(waso_bl_md = median(sd_waso, na.rm = TRUE),  # Median WASO
+            waso_bl_mn = mean(sd_waso, na.rm = TRUE),  # Mean WASO
+            waso_bl_sd = round(sd(sd_waso, na.rm = TRUE), 1),  # SD WASO
+            waso_bl_max = max(sd_waso, na.rm = TRUE),  # Worst night of sleep
+            waso_bl_min = min(sd_waso, na.rm = TRUE), # Best night of sleep
+            waso_bl_n = n(),  # Number of diaries
+            waso_bl_fx_i = round(sum(sd_waso >= 30, na.rm = TRUE)/n(), 2))
+            # Number of times WASO more than 30 minutes / total diaries   
+
+# End of treatment
+waso_eot <- waso_metrics %>% 
+  filter((sd_am_date > contact_tx6_date) & (sd_am_date <= contact_etx_date)) %>%
+  group_by(record_id) %>%
+  summarise(waso_eot_md = median(sd_waso, na.rm = TRUE),
+            waso_eot_mn = mean(sd_waso, na.rm = TRUE),
+            waso_eot_sd = round(sd(sd_waso, na.rm = TRUE), 1),
+            waso_eot_max = max(sd_waso, na.rm = TRUE),
+            waso_eot_min = min(sd_waso, na.rm = TRUE),
+            waso_eot_n = n(),  # Number of diaries
+            waso_eot_fx_i = round(sum(sd_waso >= 30, na.rm = TRUE)/n(), 2)) 
+            # Number of times WASO more than 30 minutes / total diaries
+
+
+# Follow Up
+waso_fu <- waso_metrics %>% 
+  filter((sd_am_date > contact_etx_date) & (sd_am_date <= contact_6mfu_date)) %>%
+  group_by(record_id) %>%
+  summarise(waso_fu_md = median(sd_waso, na.rm = TRUE),
+            waso_fu_mn = mean(sd_waso, na.rm = TRUE), 
+            waso_fu_sd = round(sd(sd_waso, na.rm = TRUE), 1),
+            waso_fu_max = max(sd_waso, na.rm = TRUE),
+            waso_fu_min = min(sd_waso, na.rm = TRUE),
+            waso_fu_n = n(),  # Number of diaries
+            waso_fu_fx_i = round(sum(sd_waso >= 30, na.rm = TRUE)/n(), 2)) 
+            # Number of times WASO more than 30 minutes / total diaries)
+
+```
+
+
+### Time in Bed, Total Sleep Time, Sleep Efficiency Metrics
+
+```{r}
+# Create time in bed variable
+tib_raw <- data %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary')) %>% 
+  select(record_id, sd_lo, sd_wt, sd_ema)
+#summary(tib_raw)
+
+# Convert time variable to hours:minutes as fraction of a day
+tib_raw$sd_lo_strip <- as.numeric(strptime(tib_raw$sd_lo, "%H:%M")) / 86400
+tib_raw$sd_wt_strip <- as.numeric(strptime(tib_raw$sd_wt, "%H:%M")) / 86400
+
+# Add desired wake time variable
+# If reported awakening too early, add extra desired time to wake time, or else just use wake up time
+tib_raw$sd_dwt <- ifelse(is.na(tib_raw$sd_ema), tib_raw$sd_wt_strip, tib_raw$sd_wt_strip + ((tib_raw$sd_ema / 60) / 24))
+
+# Add time in bed variable
+tib_raw$sd_tib <- ifelse(is.na(tib_raw$sd_lo_strip), NA,
+           ifelse(is.na(tib_raw$sd_dwt), NA,
+           24 * ifelse(tib_raw$sd_lo_strip > tib_raw$sd_dwt,
+                       tib_raw$sd_dwt + 1 - tib_raw$sd_lo_strip, 
+                       tib_raw$sd_dwt - tib_raw$sd_lo_strip)))
+
+data_tib <- tib_raw %>% select(record_id, sd_tib)
+#hist(data_tib$sd_tib)
+```
+
+
+```{r}
+# Time in bed calculations
+tib_metrics <- data %>%
+  group_by(record_id) %>%
+  fill(contact_baseline_date, .direction = "downup") %>%
+  fill(contact_tx1_date, .direction = "downup") %>%
+  fill(contact_tx2_date, .direction = "downup") %>%
+  fill(contact_tx3_date, .direction = "downup") %>%
+  fill(contact_tx4_date, .direction = "downup") %>%
+  fill(contact_tx5_date, .direction = "downup") %>%
+  fill(contact_tx6_date, .direction = "downup") %>%
+  fill(contact_etx_date, .direction = "downup") %>%
+  fill(contact_6mfu_date, .direction = "downup") %>%
+  ungroup() %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary') & 
+           !is.na(sd_lo) & !is.na(sd_am_date)) %>%
+  select(record_id, sd_am_date, sd_lo, sd_wt, sd_ema, sd_sl, sd_waso, contact_tx1_date, contact_tx6_date, 
+         contact_etx_date, contact_6mfu_date, contact_end_date)
+
+# Convert time variable to hours:minutes as fraction of a day
+tib_metrics$sd_lo_strip <- as.numeric(strptime(tib_metrics$sd_lo, "%H:%M")) / 86400
+tib_metrics$sd_wt_strip <- as.numeric(strptime(tib_metrics$sd_wt, "%H:%M")) / 86400
+
+# Add desired wake time variable
+# If reported awakening too early, add extra desired time to wake time, or else just use wake up time
+tib_metrics$sd_dwt <- ifelse(is.na(tib_metrics$sd_ema), tib_metrics$sd_wt_strip, tib_metrics$sd_wt_strip + ((tib_metrics$sd_ema / 60) / 24))
+
+# Add time in bed variable
+tib_metrics$sd_tib <- ifelse(is.na(tib_metrics$sd_lo_strip), NA,
+           ifelse(is.na(tib_metrics$sd_dwt), NA,
+           24 * ifelse(tib_metrics$sd_lo_strip > tib_metrics$sd_dwt,
+                       tib_metrics$sd_dwt + 1 - tib_metrics$sd_lo_strip, 
+                       tib_metrics$sd_dwt - tib_metrics$sd_lo_strip)))
+
+# Add TST and SE to tib_metrics
+tib_metrics <- tib_metrics %>%
+  mutate(
+    sd_tst = sd_tib - ((sd_sl + sd_waso)/60),  # Convert sl and waso to hours by dividing by 60
+    sd_se = sd_tst/sd_tib * 100  # Multiply by 100 to get percentage
+  )
+
+# Baseline TST
+tst_bl <- tib_metrics %>% 
+  filter(sd_am_date <= contact_tx1_date) %>%
+  group_by(record_id) %>%
+  summarise(tst_bl_md = median(sd_tst, na.rm = TRUE),
+            tst_bl_mn = mean(sd_tst, na.rm = TRUE),
+            tst_bl_sd = round(sd(sd_tst, na.rm = TRUE), 1),
+            tst_bl_max = max(sd_tst, na.rm = TRUE),
+            tst_bl_min = min(sd_tst, na.rm = TRUE),
+            tst_bl_n = n())
+
+# End of treatment TST
+tst_eot <- tib_metrics %>% 
+  filter((sd_am_date > contact_tx6_date) & (sd_am_date <= contact_etx_date)) %>%
+  group_by(record_id) %>%
+  summarise(tst_eot_md = median(sd_tst, na.rm = TRUE),
+            tst_eot_mn = mean(sd_tst, na.rm = TRUE),
+            tst_eot_sd = round(sd(sd_tst, na.rm = TRUE), 1),
+            tst_eot_max = max(sd_tst, na.rm = TRUE),
+            tst_eot_min = min(sd_tst, na.rm = TRUE),
+            tst_eot_n = n())
+
+# Follow Up TST
+tst_fu <- tib_metrics %>% 
+  filter((sd_am_date > contact_etx_date) & (sd_am_date <= contact_6mfu_date)) %>%
+  group_by(record_id) %>%
+  summarise(tst_fu_md = median(sd_tst, na.rm = TRUE),
+            tst_fu_mn = mean(sd_tst, na.rm = TRUE),
+            tst_fu_sd = round(sd(sd_tst, na.rm = TRUE), 1),
+            tst_fu_max = max(sd_tst, na.rm = TRUE),
+            tst_fu_min = min(sd_tst, na.rm = TRUE),
+            tst_fu_n = n())
+
+# Baseline SE
+se_bl <- tib_metrics %>% 
+  filter(sd_am_date <= contact_tx1_date) %>%
+  group_by(record_id) %>%
+  summarise(se_bl_md = median(sd_se, na.rm = TRUE),
+            se_bl_mn = mean(sd_se, na.rm = TRUE),
+            se_bl_sd = round(sd(sd_se, na.rm = TRUE), 1),
+            se_bl_max = max(sd_se, na.rm = TRUE),
+            se_bl_min = min(sd_se, na.rm = TRUE),
+            se_bl_n = n())
+
+# End of treatment SE
+se_eot <- tib_metrics %>% 
+  filter((sd_am_date > contact_tx6_date) & (sd_am_date <= contact_etx_date)) %>%
+  group_by(record_id) %>%
+  summarise(se_eot_md = median(sd_se, na.rm = TRUE),
+            se_eot_mn = mean(sd_se, na.rm = TRUE),
+            se_eot_sd = round(sd(sd_se, na.rm = TRUE), 1),
+            se_eot_max = max(sd_se, na.rm = TRUE),
+            se_eot_min = min(sd_se, na.rm = TRUE),
+            se_eot_n = n())
+
+# Follow Up SE
+se_fu <- tib_metrics %>% 
+  filter((sd_am_date > contact_etx_date) & (sd_am_date <= contact_6mfu_date)) %>%
+  group_by(record_id) %>%
+  summarise(se_fu_md = median(sd_se, na.rm = TRUE),
+            se_fu_mn = mean(sd_se, na.rm = TRUE),
+            se_fu_sd = round(sd(sd_se, na.rm = TRUE), 1),
+            se_fu_max = max(sd_se, na.rm = TRUE),
+            se_fu_min = min(sd_se, na.rm = TRUE),
+            se_fu_n = n())
+
+
+# Baseline TIB
+tib_bl <- tib_metrics %>% 
+  filter(sd_am_date <= contact_tx1_date) %>%
+  group_by(record_id) %>%
+  summarise(tib_bl_md = median(sd_tib, na.rm = TRUE),  # Median TIB
+            tib_bl_mn = mean(sd_tib, na.rm = TRUE),  # Mean TIB
+            tib_bl_sd = round(sd(sd_tib, na.rm = TRUE), 1),  # SD TIB
+            tib_bl_max = max(sd_tib, na.rm = TRUE),  # Longest sleep opportunity
+            tib_bl_min = min(sd_tib, na.rm = TRUE), # Shortest sleep opportunity
+            tib_bl_n = n()) # Number of diaries with TIB
+
+# End of treatment TIB
+tib_eot <- tib_metrics %>% 
+  filter((sd_am_date > contact_tx6_date) & (sd_am_date <= contact_etx_date)) %>%
+  group_by(record_id) %>%
+  summarise(tib_eot_md = median(sd_tib, na.rm = TRUE),
+            tib_eot_mn = mean(sd_tib, na.rm = TRUE),
+            tib_eot_sd = round(sd(sd_tib, na.rm = TRUE), 1),
+            tib_eot_max = max(sd_tib, na.rm = TRUE),
+            tib_eot_min = min(sd_tib, na.rm = TRUE),
+            tib_eot_n = n())  # Number of diaries
+
+
+# Follow Up TIB
+tib_fu <- tib_metrics %>% 
+  filter((sd_am_date > contact_etx_date) & (sd_am_date <= contact_6mfu_date)) %>%
+  group_by(record_id) %>%
+  summarise(tib_fu_md = median(sd_tib, na.rm = TRUE),
+            tib_fu_mn = mean(sd_tib, na.rm = TRUE),
+            tib_fu_sd = round(sd(sd_tib, na.rm = TRUE), 1),
+            tib_fu_max = max(sd_tib, na.rm = TRUE),
+            tib_fu_min = min(sd_tib, na.rm = TRUE),
+            tib_fu_n = n()) # Number of diaries
+```
+
+
+### Sleep Initation by treatment milestone
+
+```{r}
+# SOL calculation
+sol_metrics <- data %>%
+  group_by(record_id) %>%
+  fill(contact_baseline_date, .direction = "downup") %>%
+  fill(contact_tx1_date, .direction = "downup") %>%
+  fill(contact_tx2_date, .direction = "downup") %>%
+  fill(contact_tx3_date, .direction = "downup") %>%
+  fill(contact_tx4_date, .direction = "downup") %>%
+  fill(contact_tx5_date, .direction = "downup") %>%
+  fill(contact_tx6_date, .direction = "downup") %>%
+  fill(contact_etx_date, .direction = "downup") %>%
+  fill(contact_6mfu_date, .direction = "downup") %>%
+  ungroup() %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary') & 
+           !is.na(sd_sl) & !is.na(sd_am_date)) %>%
+  select(record_id, sd_sl, sd_am_date, contact_tx1_date, contact_tx6_date, 
+         contact_etx_date, contact_6mfu_date, contact_end_date) 
+
+# Baseline
+sol_bl <- sol_metrics %>% 
+  filter(sd_am_date <= contact_tx1_date) %>%
+  group_by(record_id) %>%
+  summarise(sol_bl_md = median(sd_sl, na.rm = TRUE),  # Median SOL
+            sol_bl_mn = mean(sd_sl, na.rm = TRUE),  # Mean SOL
+            sol_bl_sd = round(sd(sd_sl, na.rm = TRUE), 1),  # SD SOL
+            sol_bl_max = max(sd_sl, na.rm = TRUE),  # Worst night of sleep
+            sol_bl_min = min(sd_sl, na.rm = TRUE), # Best night of sleep
+            sol_bl_n = n(),  # Number of diaries
+            sol_bl_fx_i = round(sum(sd_sl >= 30, na.rm = TRUE)/n(), 2))
+            # Number of times SOL more than 30 minutes / total diaries   
+
+# End of treatment
+sol_eot <- sol_metrics %>% 
+  filter((sd_am_date > contact_tx6_date) & (sd_am_date <= contact_etx_date)) %>%
+  group_by(record_id) %>%
+  summarise(sol_eot_md = median(sd_sl, na.rm = TRUE),
+            sol_eot_mn = mean(sd_sl, na.rm = TRUE),
+            sol_eot_sd = round(sd(sd_sl, na.rm = TRUE), 1),
+            sol_eot_max = max(sd_sl, na.rm = TRUE),
+            sol_eot_min = min(sd_sl, na.rm = TRUE),
+            sol_eot_n = n(),  # Number of diaries
+            sol_eot_fx_i = round(sum(sd_sl >= 30, na.rm = TRUE)/n(), 2)) 
+            # Number of times SOL more than 30 minutes / total diaries
+
+
+# Follow Up
+sol_fu <- sol_metrics %>% 
+  filter((sd_am_date > contact_etx_date) & (sd_am_date <= contact_6mfu_date)) %>%
+  group_by(record_id) %>%
+  summarise(sol_fu_md = median(sd_sl, na.rm = TRUE),
+            sol_fu_mn = mean(sd_sl, na.rm = TRUE),  
+            sol_fu_sd = round(sd(sd_sl, na.rm = TRUE), 1),
+            sol_fu_max = max(sd_sl, na.rm = TRUE),
+            sol_fu_min = min(sd_sl, na.rm = TRUE),
+            sol_fu_n = n(),  # Number of diaries
+            sol_fu_fx_i = round(sum(sd_sl >= 30, na.rm = TRUE)/n(), 2)) 
+            # Number of times SOL more than 30 minutes / total diaries)
+```
+
+### Early Awakening by treatment milestone
+
+```{r}
+# EMA calculations
+ema_metrics <- data %>%
+  group_by(record_id) %>%
+  fill(contact_baseline_date, .direction = "downup") %>%
+  fill(contact_tx1_date, .direction = "downup") %>%
+  fill(contact_tx2_date, .direction = "downup") %>%
+  fill(contact_tx3_date, .direction = "downup") %>%
+  fill(contact_tx4_date, .direction = "downup") %>%
+  fill(contact_tx5_date, .direction = "downup") %>%
+  fill(contact_tx6_date, .direction = "downup") %>%
+  fill(contact_etx_date, .direction = "downup") %>%
+  fill(contact_6mfu_date, .direction = "downup") %>%
+  ungroup() %>% 
+  filter(!is.na(redcap_repeat_instrument == 'sleep_diary') & 
+           !is.na(sd_ema) & !is.na(sd_am_date)) %>%
+  select(record_id, sd_ema, sd_am_date, contact_tx1_date, contact_tx6_date, 
+         contact_etx_date, contact_6mfu_date, contact_end_date) 
+
+# Baseline
+ema_bl <- ema_metrics %>% 
+  filter(sd_am_date <= contact_tx1_date) %>%
+  group_by(record_id) %>%
+  summarise(ema_bl_md = median(sd_ema, na.rm = TRUE),  # Median WASO
+            ema_bl_mn = mean(sd_ema, na.rm = TRUE),  # Mean WASO
+            ema_bl_sd = round(sd(sd_ema, na.rm = TRUE), 1),  # SD WASO
+            ema_bl_max = max(sd_ema, na.rm = TRUE),  # Worst night of sleep
+            ema_bl_min = min(sd_ema, na.rm = TRUE), # Best night of sleep
+            ema_bl_n = n(),  # Number of diaries
+            ema_bl_fx_i = round(sum(sd_ema >= 30, na.rm = TRUE)/n(), 2))
+            # Number of times EMA more than 30 minutes / total diaries   
+
+# End of treatment
+ema_eot <- ema_metrics %>% 
+  filter((sd_am_date > contact_tx6_date) & (sd_am_date <= contact_etx_date)) %>%
+  group_by(record_id) %>%
+  summarise(ema_eot_md = median(sd_ema, na.rm = TRUE),
+            ema_eot_mn = mean(sd_ema, na.rm = TRUE),
+            ema_eot_sd = round(sd(sd_ema, na.rm = TRUE), 1),
+            ema_eot_max = max(sd_ema, na.rm = TRUE),
+            ema_eot_min = min(sd_ema, na.rm = TRUE),
+            ema_eot_n = n(),  # Number of diaries
+            ema_eot_fx_i = round(sum(sd_ema >= 30, na.rm = TRUE)/n(), 2)) 
+            # Number of times EMA more than 30 minutes / total diaries
+
+
+# Follow Up
+ema_fu <- ema_metrics %>% 
+  filter((sd_am_date > contact_etx_date) & (sd_am_date <= contact_6mfu_date)) %>%
+  group_by(record_id) %>%
+  summarise(ema_fu_md = median(sd_ema, na.rm = TRUE),
+            ema_fu_mn = mean(sd_ema, na.rm = TRUE),
+            ema_fu_sd = round(sd(sd_ema, na.rm = TRUE), 1),
+            ema_fu_max = max(sd_ema, na.rm = TRUE),
+            ema_fu_min = min(sd_ema, na.rm = TRUE),
+            ema_fu_n = n(),  # Number of diaries
+            ema_fu_fx_i = round(sum(sd_ema >= 30, na.rm = TRUE)/n(), 2)) 
+            # Number of times EMA more than 30 minutes / total diaries)
+```
+
+## Date Data
+
+```{r}
+data_dates <- data %>%
+  filter(redcap_event_name == 'overall_arm_2') %>%
+  group_by(record_id) %>% 
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  select(record_id,
+         contact_baseline_date,
+         contact_tx1_date,
+         contact_tx6_date,
+         contact_etx_date,
+         contact_6mfu_date,
+         contact_end_date)
+```
+
+## Participation timeline variables
+
+```{r}
+data_visits <- data %>% 
+  filter(redcap_event_name == 'overall_arm_2') %>%
+  group_by(record_id) %>% 
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  select(record_id, 
+         contact_end_lastvisit, 
+         contact_end_reason)
+```
+
+
+# Combine All Data and Diary Metrics into New Dataframe
+
+```{r}
+ data_list <- list(data_age, data_sex, data_ethnic, data_race, data_deg, 
+                   data_ptsd_bi, data_sleep, data_tx,
+               data_meds, data_berlin, data_aud, data_txadh,
+               data_tx_sat, data_ceq,
+               diary_sum,
+               waso_sum, waso_bl, waso_eot, waso_fu,
+               tib_bl, tib_eot, tib_fu,
+               tst_bl, tst_eot, tst_fu,
+               se_bl, se_eot, se_fu,
+               sol_bl, sol_eot, sol_fu,
+               ema_bl, ema_eot, ema_fu, 
+               data_ptsd_bl, data_ptsd_eot, data_ptsd_fu,
+               data_isi_bl, data_isi_tx1, data_isi_eot, data_isi_fu,
+               data_itype_bl, data_itype_eot, data_itype_fu,
+               data_pci_bl, data_pci_eot, data_pci_fu,
+               data_pcs_bl, data_pcs_eot, data_pcs_fu,
+               data_mcs_bl, data_mcs_eot, data_mcs_fu,
+               data_penn_bl, data_penn_eot, data_penn_fu,
+               data_phq_bl, data_phq_eot, data_phq_fu,
+               data_hit_bl, data_hit_eot, data_hit_fu,
+               data_bpisev_bl, data_bpisev_eot, data_bpisev_fu,
+               data_bpiinf_bl, data_bpiinf_eot, data_bpiinf_fu,
+               data_dbas_bl, data_dbas_eot, data_dbas_fu,
+               data_fosq_bl, data_fosq_eot, data_fosq_fu,
+               data_ess_bl, data_ess_eot, data_ess_fu,
+               data_dates, data_visits
+               )
+
+# Function to merge the list of dataframes by record_id without dropping NA values
+merge_horizontally <- function(data_list) {
+  # Start with the first dataframe in the list
+  base_df <- data_list[[1]]
+  
+  # Iteratively merge each dataframe on record_id
+  for (df in data_list[-1]) {
+    base_df <- left_join(base_df, df, by = "record_id", suffix = c("", "_other"))
+  }
+  
+  return(base_df)
+}
+
+# Apply the merge function to the list of unique dataframes
+data_clean <- merge_horizontally(data_list)
+
+# View the resulting dataframe
+#View(data_clean)
+```
+
+
+## Fix Some Data Issues
+
+```{r}
+# Fill in SW183 baseline ISI with scoring from Tx1 ISI
+data_clean[data_clean$record_id == "SW183", "isi_bl"] <- data_clean[data_clean$record_id == "SW183", "isi_tx1"]
+
+# Fill in SW183 baseline ESS with scoring from Tx1 ESS
+data_clean[data_clean$record_id == "SW183", "ess_bl"] <- 16
+
+# Fill in SW183 baseline itype with scoring from Tx1 itype
+data_clean[data_clean$record_id == "SW183", "itype_bl"] <- 'I M'
+
+# Fill in SW134 EOT ISI with FU 
+data_clean[data_clean$record_id == "SW134", "isi_eot"] <- data_clean[data_clean$record_id == "SW134", "isi_fu"]
+
+```
+
+
+## Additional Feature Creation
+
+## Timeline Differences
+
+### Treatment Time
+
+#### Time to complete treatment (T1 to T6) in days
+
+```{r}
+data_clean$tx_time <- as.numeric(difftime(data_clean$contact_tx6_date, 
+                                          data_clean$contact_tx1_date, units = 'days'))
+```
+
+#### Time to complete EOT appointment (T1 to EOT) in days
+
+```{r}
+data_clean$eot_time <- as.numeric(difftime(data_clean$contact_etx_date, 
+                                           data_clean$contact_tx1_date, units = 'days'))
+```
+
+#### Time to complete follow up appointment (T1 to FU) in days
+
+```{r}
+data_clean$fu_time <- as.numeric(difftime(data_clean$contact_6mfu_date, 
+                                          data_clean$contact_tx1_date, units = 'days'))
+```
+
+#### Total Diary Time - Baseline diaries to EOT
+
+```{r}
+data_clean$bl_eot_time <- as.numeric(difftime(data_clean$contact_etx_date, 
+                                           data_clean$contact_baseline_date, units = 'days'))
+
+```
+
+#### Total Enrollment Time (baseline to stopping point)
+
+```{r}
+data_clean$total_time <- as.numeric(difftime(data_clean$contact_end_date, 
+                                             data_clean$contact_baseline_date, units = 'days'))
+```
+
+## Self Report Measures - Change over Time
+
+### Insomnia Severity Index
+
+#### Difference in ISI scores beween baseline and end-of-treatment
+
+```{r}
+data_clean$isi_tx_diff <- data_clean$isi_eot - data_clean$isi_bl
+```
+
+
+#### Difference in ISI scores beween baseline and follow up
+
+```{r}
+data_clean$isi_fu_diff <- data_clean$isi_fu - data_clean$isi_bl
+```
+
+#### Difference in ISI scores between baseline and Tx1
+
+```{r}
+data_clean$isi_tx1_diff <- data_clean$isi_tx1 - data_clean$isi_bl
+```
+
+### PTSD Checklist
+
+#### Difference in PCL scores beween baseline and end-of-treatment
+
+```{r}
+data_clean$pcl_tx_diff <- data_clean$pcl_eot - data_clean$pcl_bl
+```
+
+#### Difference in PCL scores beween baseline and follow up
+
+```{r}
+data_clean$pcl_fu_diff <- data_clean$pcl_fu - data_clean$pcl_bl
+```
+
+### SF36 Physical Health Component
+
+#### Difference in SF36-PCS scores beween baseline and end-of-treatment
+
+```{r}
+data_clean$pcs_tx_diff <- data_clean$pcs_eot - data_clean$pcs_bl
+```
+
+#### Difference in SF36-PCS scores beween baseline and follow up
+
+```{r}
+data_clean$pcs_fu_diff <- data_clean$pcs_fu - data_clean$pcs_bl
+```
+
+### SF 36 Mental Health Component
+
+#### Difference in SF36-MCS scores beween baseline and end-of-treatment
+
+```{r}
+data_clean$mcs_tx_diff <- data_clean$mcs_eot - data_clean$mcs_bl
+```
+
+#### Difference in SF36-MCS scores beween baseline and follow up
+
+```{r}
+data_clean$mcs_fu_diff <- data_clean$mcs_fu - data_clean$mcs_bl
+```
+
+### Penn State Worry 
+
+#### Difference in PENN scores beween baseline and end-of-treatment
+
+```{r}
+data_clean$penn_tx_diff <- data_clean$penn_eot - data_clean$penn_bl
+```
+
+#### Difference in PENN scores beween baseline and follow up
+
+```{r}
+data_clean$penn_fu_diff <- data_clean$penn_fu - data_clean$penn_bl
+```
+
+### Dysfunction Beliefs About Sleep
+
+#### Difference in DBAS beween baseline and end-of-treatment
+
+```{r}
+data_clean$dbas_tx_diff <- data_clean$dbas_eot - data_clean$dbas_bl
+```
+
+#### Difference in DBAS scores beween baseline and follow up
+
+```{r}
+data_clean$dbas_fu_diff <- data_clean$dbas_fu - data_clean$dbas_bl
+```
+
+### Brief Pain Inventory
+
+#### Difference in BPI Inference and Severity beween baseline and end-of-treatment
+
+```{r}
+data_clean$bpiinf_tx_diff <- data_clean$bpiinf_eot - data_clean$bpiinf_bl
+data_clean$bpisev_tx_diff <- data_clean$bpisev_eot - data_clean$bpisev_bl
+```
+
+
+#### Difference in BPI scores beween baseline and follow up
+
+```{r}
+data_clean$bpiinf_fu_diff <- data_clean$bpiinf_fu - data_clean$bpiinf_bl
+data_clean$bpisev_fu_diff <- data_clean$bpisev_fu - data_clean$bpisev_bl
+```
+
+### Headaches
+
+#### Difference in HIT6 beween baseline and end-of-treatment
+
+```{r}
+data_clean$hit_tx_diff <- data_clean$hit_eot - data_clean$hit_bl
+```
+
+#### Difference in HIT6 scores beween baseline and follow up
+
+```{r}
+data_clean$hit_fu_diff <- data_clean$hit_fu - data_clean$hit_bl
+```
+
+### Functional Outcomes of Sleep
+
+#### Difference in FOSQ beween baseline and end-of-treatment
+
+##### Reverse Scored
+
+```{r}
+data_clean$fosq_tx_diff <- data_clean$fosq_eot - data_clean$fosq_bl
+```
+
+#### Difference in FOSQ scores beween baseline and follow up
+
+##### Reverse Scored 
+
+```{r}
+data_clean$fosq_fu_diff <- data_clean$fosq_fu - data_clean$fosq_bl
+```
+
+### Patient Health Questionnaire
+
+#### Difference in PHQ beween baseline and end-of-treatment
+
+```{r}
+data_clean$phq_tx_diff <- data_clean$phq_eot - data_clean$phq_bl
+```
+
+#### Difference in PHQ scores beween baseline and follow up
+
+```{r}
+data_clean$phq_fu_diff <- data_clean$phq_fu - data_clean$phq_bl
+```
+
+### Epworth Sleepiness Scale
+
+#### Difference in ESS beween baseline and end-of-treatment
+
+```{r}
+data_clean$ess_tx_diff <- data_clean$ess_eot - data_clean$ess_bl
+```
+
+#### Difference in ESS scores beween baseline and follow up
+
+```{r}
+data_clean$ess_fu_diff <- data_clean$ess_fu - data_clean$ess_bl
+```
+
+
+## Diary Measures
+
+### WASO
+
+#### Difference in median WASO beween baseline and end-of-treatment
+
+```{r}
+data_clean$waso_md_tx_diff <- data_clean$waso_eot_md - data_clean$waso_bl_md
+```
+
+#### Difference in median WASO scores beween baseline and follow up
+
+```{r}
+data_clean$waso_md_fu_diff <- data_clean$waso_fu_md - data_clean$waso_bl_md
+```
+
+#### Difference in mean WASO beween baseline and end-of-treatment
+
+```{r}
+data_clean$waso_mn_tx_diff <- data_clean$waso_eot_mn - data_clean$waso_bl_mn
+```
+
+#### Difference in mean WASO scores beween baseline and follow up
+
+```{r}
+data_clean$waso_mn_fu_diff <- data_clean$waso_fu_mn - data_clean$waso_bl_mn
+```
+
+
+#### Difference in WASO periods greater than 30mins, i.e., insomnia episode, baseline and EOT
+
+```{r}
+data_clean$waso_i_tx_diff <- data_clean$waso_eot_fx_i - data_clean$waso_bl_fx_i
+```
+
+#### Difference in WASO periods greater than 30mins, i.e., insomnia episode, baseline and FU
+
+```{r}
+data_clean$waso_i_fu_diff <- data_clean$waso_fu_fx_i - data_clean$waso_bl_fx_i
+```
+
+### Time in Bed
+
+#### Difference in median TIB beween baseline and end-of-treatment
+
+```{r}
+data_clean$tib_md_tx_diff <- data_clean$tib_eot_md - data_clean$tib_bl_md
+```
+
+#### Difference in median TIB scores beween baseline and follow up
+
+```{r}
+data_clean$tib_md_fu_diff <- data_clean$tib_fu_md - data_clean$tib_bl_md
+```
+
+#### Difference in mean TIB beween baseline and end-of-treatment
+
+```{r}
+data_clean$tib_mn_tx_diff <- data_clean$tib_eot_mn - data_clean$tib_bl_mn
+```
+
+#### Difference in mean TIB scores beween baseline and follow up
+
+```{r}
+data_clean$tib_mn_fu_diff <- data_clean$tib_fu_mn - data_clean$tib_bl_mn
+```
+
+
+### Total Sleep Time
+
+#### Difference in median TST between baseline and end-of-treatment
+
+```{r}
+data_clean$tst_md_tx_diff <- data_clean$tst_eot_md - data_clean$tst_bl_md
+```
+
+#### Difference in median TST between baseline and follow up
+
+```{r}
+data_clean$tst_md_fu_diff <- data_clean$tst_fu_md - data_clean$tst_bl_md
+```
+
+#### Difference in mean TST beween baseline and end-of-treatment
+
+```{r}
+data_clean$tst_mn_tx_diff <- data_clean$tst_eot_mn - data_clean$tst_bl_mn
+```
+
+#### Difference in mean TST scores beween baseline and follow up
+
+```{r}
+data_clean$tst_mn_fu_diff <- data_clean$tst_fu_mn - data_clean$tst_bl_mn
+```
+
+### Sleep Efficiency
+
+#### Difference in median SE between baseline and end-of-treatment
+
+```{r}
+data_clean$se_md_tx_diff <- data_clean$se_eot_md - data_clean$se_bl_md
+```
+
+#### Difference in median SE between baseline and follow up
+
+```{r}
+data_clean$se_md_fu_diff <- data_clean$se_fu_md - data_clean$se_bl_md
+```
+
+#### Difference in mean SE beween baseline and end-of-treatment
+
+```{r}
+data_clean$se_mn_tx_diff <- data_clean$se_eot_mn - data_clean$se_bl_mn
+```
+
+#### Difference in mean SE scores beween baseline and follow up
+
+```{r}
+data_clean$se_mn_fu_diff <- data_clean$se_fu_mn - data_clean$se_bl_mn
+```
+
+### Sleep Onset Latency
+
+#### Difference in median SOL beween baseline and end-of-treatment
+
+```{r}
+data_clean$sol_md_tx_diff <- data_clean$sol_eot_md - data_clean$sol_bl_md
+```
+
+#### Difference in median SOL scores beween baseline and follow up
+
+```{r}
+data_clean$sol_md_fu_diff <- data_clean$sol_fu_md - data_clean$sol_bl_md
+```
+
+
+#### Difference in mean SOL beween baseline and end-of-treatment
+
+```{r}
+data_clean$sol_mn_tx_diff <- data_clean$sol_eot_mn - data_clean$sol_bl_mn
+```
+
+#### Difference in mean SOL scores beween baseline and follow up
+
+```{r}
+data_clean$sol_mn_fu_diff <- data_clean$sol_fu_mn - data_clean$sol_bl_mn
+```
+
+
+#### Difference in SOL periods greater than 30mins, i.e., insomnia episode, baseline and EOT
+
+```{r}
+data_clean$sol_i_tx_diff <- data_clean$sol_eot_fx_i - data_clean$sol_bl_fx_i
+```
+
+#### Difference in SOL periods greater than 30mins, i.e., insomnia episode, baselin and FU
+
+```{r}
+data_clean$sol_i_fu_diff <- data_clean$sol_fu_fx_i - data_clean$sol_bl_fx_i
+```
+
+### Early Morning Awakening
+
+#### Difference in median EMA beween baseline and end-of-treatment
+
+```{r}
+data_clean$ema_md_tx_diff <- data_clean$ema_eot_md - data_clean$ema_bl_md
+```
+
+#### Difference in median EMA scores beween baseline and follow up
+
+```{r}
+data_clean$ema_md_fu_diff <- data_clean$ema_fu_md - data_clean$ema_bl_md
+```
+
+
+#### Difference in mean EMA beween baseline and end-of-treatment
+
+```{r}
+data_clean$ema_mn_tx_diff <- data_clean$ema_eot_mn - data_clean$ema_bl_mn
+```
+
+#### Difference in mean EMA scores beween baseline and follow up
+
+```{r}
+data_clean$ema_mn_fu_diff <- data_clean$ema_fu_mn - data_clean$ema_bl_mn
+```
+
+#### Difference in EMA periods greater than 30mins, i.e., insomnia episode, baseline and EOT
+
+```{r}
+data_clean$ema_i_tx_diff <- data_clean$ema_eot_fx_i - data_clean$ema_bl_fx_i
+```
+
+#### Difference in EMA periods greater than 30mins, i.e., insomnia episode, baselin and FU
+
+```{r}
+data_clean$ema_i_fu_diff <- data_clean$ema_fu_fx_i - data_clean$ema_bl_fx_i
+```
+
+# Update Datatypes
+
+```{r}
+data_clean$demo_sex <- 
+  factor(data_clean$demo_sex, 
+         levels = c(1, 2), 
+         labels = c('Male', 'Female'))
+
+data_clean$contact_ptsd <- 
+  factor(data_clean$contact_ptsd, 
+         levels = c(0, 1), 
+         labels = c('No', 'Yes'))
+
+data_clean$contact_sleepmed <- 
+  factor(data_clean$contact_sleepmed, 
+         levels = c(0, 1), 
+         labels = c('No', 'Yes'))
+
+data_clean$Berlin_total_risk <- 
+  factor(data_clean$Berlin_total_risk, 
+         levels = c(0, 1), 
+         labels = c('No', 'Yes'))
+
+
+data_clean$contact_treatment <- 
+  factor(data_clean$contact_treatment, 
+         levels = c(1, 2), 
+         labels = c('CBTI', 'CTRL'))
+
+data_clean$cns_med <- 
+  factor(data_clean$cns_med, 
+         levels = c(0, 1), 
+         labels = c('No', 'Yes'))
+
+data_clean$mini_etoh_yn <- 
+  factor(data_clean$mini_etoh_yn, 
+         levels = c(0, 1), 
+         labels = c('No', 'Yes')) 
+
+data_clean$contact_end_lastvisit <- 
+  factor(data_clean$contact_end_lastvisit, 
+         levels = c(1,2,3,4,5,6,7,8,9,10),
+         labels = c('Onsite','BL','Tx1','Tx2','Tx3',
+                    'Tx4','Tx5','Tx6','EOT','FU'))
+
+data_clean$contact_end_reason <- 
+  factor(data_clean$contact_end_reason, 
+         levels = c(1,2,3), 
+         labels = c('Complete', 'PI Drop', 'PT Drop'))
+
+data_clean$demo_race <- 
+  factor(data_clean$demo_race, 
+         levels = c(1,2,4,5,6), 
+         labels = c('Indian/Alaskan', 'Asian', 'HI/PI', 'White', '2+'))
+
+data_clean$demo_ethnic <- 
+  factor(data_clean$demo_ethnic, 
+         levels = c(1, 2), 
+         labels = c('Hisp/LatX', 'No')) 
+
+data_clean$demo_deg <- 
+  factor(data_clean$demo_deg, 
+         levels = c(1,2,3,4,5), 
+         labels = c('HS/GED', 'AA/S', 'BA/S', 'Graduate', 'None'))
+
+data_clean$itype_bl <-
+  as.factor(data_clean$itype_bl)
+
+data_clean$itype_eot <-
+  as.factor(data_clean$itype_eot)
+
+data_clean$itype_fu <-
+  as.factor(data_clean$itype_fu)
+```
+
+# Descriptive Statistics of Cleaned Data - Clinical Trial Reporting/Paper
+
+## Demographics
+
+### Age
+
+```{r}
+# Age (mean/SD)
+all_age <- data_clean %>% 
+  summarise(age_mn = round(mean(demo_age),2),
+            age_sd = round(sd(demo_age),2))
+
+cbti_age <- data_clean %>% 
+  filter(contact_treatment == 'CBTI') %>% 
+  summarise(age_mn = round(mean(demo_age),2),
+            age_sd = round(sd(demo_age),2))
+
+ctrl_age <- data_clean %>% 
+  filter(contact_treatment == 'CTRL') %>% 
+  summarise(age_mn = round(mean(demo_age),2),
+            age_sd = round(sd(demo_age),2))
+
+group <- c('all', 'cbti', 'ctrl')
+ages_table <- cbind(group, rbind(all_age, cbti_age, ctrl_age))
+#ages_table
+```
+
+### Sex
+
+```{R}
+# Sex
+all_sex <- data_clean %>% 
+  summarise(sex_n = table(demo_sex),
+            sex_p = round(prop.table(table(demo_sex)),2))
+
+cbti_sex <- data_clean %>% 
+  filter(contact_treatment == 'CBTI') %>% 
+  summarise(sex_n = table(demo_sex),
+            sex_p = round(prop.table(table(demo_sex)),2))
+
+ctrl_sex <- data_clean %>% 
+  filter(contact_treatment == 'CTRL') %>% 
+  summarise(sex_n = table(demo_sex),
+            sex_p = round(prop.table(table(demo_sex)),2))
+
+group <- c("all", "all", "cbti", "cbti", "ctrl", "ctrl")
+level <- c("M", "F", "M", "F", "M", "F")
+sex_table <- cbind(group, level, rbind(all_sex, cbti_sex, ctrl_sex))
+#sex_table
+```
+
+### Ethnicity
+
+```{r}
+# Ethnicity
+all_ethnic <- data_clean %>% 
+  summarise(ethnic_n = table(demo_ethnic),
+            ethnic_p = round(prop.table(table(demo_ethnic)),2))
+
+cbti_ethnic <- data_clean %>% 
+  filter(contact_treatment == 'CBTI') %>% 
+  summarise(ethnic_n = table(demo_ethnic),
+            ethnic_p = round(prop.table(table(demo_ethnic)),2))
+
+ctrl_ethnic <- data_clean %>% 
+  filter(contact_treatment == 'CTRL') %>% 
+  summarise(ethnic_n = table(demo_ethnic),
+            ethnic_p = round(prop.table(table(demo_ethnic)),2))
+
+group <- c("all", "all", "cbti", "cbti", "ctrl", "ctrl")
+level <- c("Hisp/LatX", "No", "Hisp/LatX", "No", "Hisp/LatX", "No")
+ethnic_table <- cbind(group, level, rbind(all_ethnic, cbti_ethnic, ctrl_ethnic))
+#ethnic_table
+```
+
+
+### Race
+
+```{r}
+# Race
+all_race_n <- data_clean %>%
+  group_by(contact_treatment) %>%
+  select("demo_race") %>%
+  table()
+
+all_race_p <- round(prop.table(all_race_n),2)
+
+#all_race_n
+#all_race_p
+```
+
+
+### Degree/Education
+
+```{r}
+# Degree
+all_deg <- data_clean %>% 
+  summarise(deg_n = table(demo_deg),
+            deg_p = round(prop.table(table(demo_deg)),2))
+
+cbti_deg <- data_clean %>% 
+  filter(contact_treatment == 'CBTI') %>% 
+  summarise(deg_n = table(demo_deg),
+            deg_p = round(prop.table(table(demo_deg)),2))
+
+ctrl_deg <- data_clean %>% 
+  filter(contact_treatment == 'CTRL') %>% 
+  summarise(deg_n = table(demo_deg),
+            deg_p = round(prop.table(table(demo_deg)),2))
+
+#kable(all_deg)
+
+#kable(cbti_deg)
+
+#kable(ctrl_deg)
+
+
+all_deg_n <- data_clean %>%
+  group_by(contact_treatment) %>%
+  select("demo_deg") %>%
+  table()
+
+all_deg_p <- round(prop.table(all_deg_n),2)
+
+#all_deg_n
+#all_deg_p
+
+```
+
+### Outcome Measure - Per Protocol
+
+#### Baseline
+
+```{R}
+# ISI at baseline (mean/SD)
+all_pp_isi_bl <- data_clean %>% 
+  summarise(isi_mn = round(mean(isi_bl),2),
+            isi_sd = round(sd(isi_bl),2))
+
+cbti_pp_isi_bl <- data_clean %>% 
+  filter(contact_treatment == 'CBTI') %>% 
+  summarise(isi_mn = round(mean(isi_bl),2),
+            isi_sd = round(sd(isi_bl),2))
+
+ctrl_pp_isi_bl <- data_clean %>% 
+  filter(contact_treatment == 'CTRL') %>% 
+  summarise(isi_mn = round(mean(isi_bl),2),
+            isi_sd = round(sd(isi_bl),2))
+
+group <- c('all', 'cbti', 'ctrl')
+pp_isi_bl_table <- cbind(group, rbind(all_pp_isi_bl, cbti_pp_isi_bl, ctrl_pp_isi_bl))
+#pp_isi_bl_table
+```
+
+
+#### End of Treatment
+
+```{r}
+# ISI at EOT (mean/SD)
+data_clean
+
+all_pp_isi_eot <- data_clean %>% 
+  summarise(isi_mn = round(mean(isi_eot),2),
+            isi_sd = round(sd(isi_eot),2))
+
+cbti_pp_isi_eot <- data_clean %>% 
+  filter(contact_treatment == 'CBTI') %>% 
+  summarise(isi_mn = round(mean(isi_eot),2),
+            isi_sd = round(sd(isi_eot),2))
+
+ctrl_pp_isi_eot <- data_clean %>% 
+  filter(contact_treatment == 'CTRL') %>% 
+  summarise(isi_mn = round(mean(isi_eot),2),
+            isi_sd = round(sd(isi_eot),2))
+
+#kable(all_pp_isi_eot)
+
+#kable(cbti_pp_isi_eot)
+
+#kable(ctrl_pp_isi_eot)
+```
+
