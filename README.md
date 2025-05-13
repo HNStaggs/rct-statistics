@@ -33,8 +33,17 @@
 * Daily diary metrics
 
 ## File 3: RCT Modeling
-* Per protocol analysis of primary and secondary aims, mediators, and moderators
-* Intent-to-treat analysis (data imputed via multiple imputations) of primary and secondary aims
 
-# Primary Finding
+### Per Protocol
+* Per protocol analysis of primary and secondary aims using linear mixed effects models (group x. time)
+* Per protocol moderator analysis using generalized linear model (outcome measure change ~ baseline symptoms values)
+* Per protocol mediator analysis using bootstrap linear model for standardized coefficients of variance (outcome measure change ~ symptom change)
+
+### Intent-to-treat
+* Data imputed using multiple imputations 
+* Primary and secondary aims analysis using linear mized effects models (group x. time)
+
+# Primary Findings
 * Active treatment offered statistically significant improvement in symptoms compared to control treatment
+* No significant moderators
+* Treatment effect mediated by change in depression symptoms and sleep behavioral change
